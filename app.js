@@ -15,6 +15,9 @@ class HabitTrackerApp {
         this.currentFilter = 'all';
         this.currentMonth = moment();
         this.editingHabitId = null;
+        this.dateRangeDays = 30;
+        this.customDateStart = null;
+        this.customDateEnd = null;
         
         this.init();
     }
@@ -296,6 +299,10 @@ class HabitTrackerApp {
             prevMonth: document.getElementById('prevMonth'),
             nextMonth: document.getElementById('nextMonth'),
             
+            // Analytics
+            dateRangeSelect: document.getElementById('dateRangeSelect'),
+            customDateRange: document.getElementById('customDateRange'),
+            
             // Settings
             themeToggle: document.getElementById('themeToggle'),
             themeSelect: document.getElementById('themeSelect'),
@@ -324,6 +331,21 @@ class HabitTrackerApp {
                 animation: 150,
                 handle: '.habit-icon',
                 onEnd: () => this.saveHabitOrder()
+            });
+        }
+        
+        // Initialize Flatpickr for custom date range
+        if (this.elements.customDateRange) {
+            flatpickr(this.elements.customDateRange, {
+                mode: 'range',
+                dateFormat: 'Y-m-d',
+                onChange: (selectedDates) => {
+                    if (selectedDates.length === 2) {
+                        this.customDateStart = moment(selectedDates[0]);
+                        this.customDateEnd = moment(selectedDates[1]);
+                        this.renderAnalytics();
+                    }
+                }
             });
         }
     }
@@ -425,6 +447,20 @@ class HabitTrackerApp {
             this.elements.habitSearch.addEventListener('input', _.debounce((e) => {
                 this.searchHabits(e.target.value);
             }, 300));
+        }
+        
+        // Date range selector
+        if (this.elements.dateRangeSelect) {
+            this.elements.dateRangeSelect.addEventListener('change', (e) => {
+                const value = e.target.value;
+                if (value === 'custom') {
+                    this.elements.customDateRange.style.display = 'block';
+                } else {
+                    this.elements.customDateRange.style.display = 'none';
+                    this.dateRangeDays = parseInt(value);
+                    this.renderAnalytics();
+                }
+            });
         }
         
         // Close modal on outside click
@@ -658,6 +694,35 @@ class HabitTrackerApp {
         this.renderWeeklyRadarChart();
         this.renderConsistencyRadarChart();
         this.renderTargetRadarChart();
+        
+        // New advanced charts
+        this.renderCategoryPolarChart();
+        this.renderTimeInvestmentPolarChart();
+        this.renderStreakQualityPolarChart();
+        this.renderHabitBubbleChart();
+        this.renderCategoryBubbleChart();
+        this.renderStreakCompletionScatter();
+        this.renderTargetActualScatter();
+        this.renderConsistencyFrequencyScatter();
+        this.renderCorrelationHeatmap();
+        this.renderMultiDimensionalBubble();
+        this.renderMomentumPolarChart();
+    }
+
+    getDateRangeData() {
+        const days = this.customDateStart && this.customDateEnd ?
+            this.customDateEnd.diff(this.customDateStart, 'days') + 1 :
+            this.dateRangeDays;
+        
+        const startDate = this.customDateStart || moment().subtract(days - 1, 'days');
+        const data = [];
+        
+        for (let i = 0; i < days; i++) {
+            const date = moment(startDate).add(i, 'days');
+            data.push(date);
+        }
+        
+        return data;
     }
 
     renderWeeklyChart() {
@@ -1453,6 +1518,839 @@ class HabitTrackerApp {
             if (habit.frequency === 'daily') {
                 count++;
             } else if (habit.selectedDays && habit.selectedDays.includes(dayOfWeek)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    // ===================================
+    // Polar Area Charts
+    // ===================================
+    renderCategoryPolarChart() {
+        const ctx = document.getElementById('categoryPolarChart');
+        if (!ctx) return;
+        
+        if (this.categoryPolarChart) {
+            this.categoryPolarChart.destroy();
+        }
+        
+        const categories = _.groupBy(this.habits, 'category');
+        const labels = Object.keys(categories).map(cat => 
+            cat.charAt(0).toUpperCase() + cat.slice(1)
+        );
+        
+        const engagementData = Object.values(categories).map(habits => {
+            const totalEngagement = habits.reduce((sum, h) => {
+                const completions = this.getLast30DaysCompletions(h.id);
+                const possible = this.getLast30DaysPossible(h);
+                return sum + (possible > 0 ? (completions / possible) * 100 : 0);
+            }, 0);
+            return totalEngagement / habits.length;
+        });
+        
+        const colors = [
+            'rgba(102, 126, 234, 0.7)',
+            'rgba(240, 147, 251, 0.7)',
+            'rgba(79, 172, 254, 0.7)',
+            'rgba(67, 233, 123, 0.7)',
+            'rgba(245, 158, 11, 0.7)',
+            'rgba(239, 68, 68, 0.7)',
+            'rgba(139, 92, 246, 0.7)',
+            'rgba(6, 182, 212, 0.7)'
+        ];
+        
+        this.categoryPolarChart = new Chart(ctx, {
+            type: 'polarArea',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: engagementData,
+                    backgroundColor: colors.slice(0, labels.length),
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.label + ': ' + context.parsed.r.toFixed(1) + '% engagement';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        max: 100
+                    }
+                }
+            }
+        });
+    }
+
+    renderTimeInvestmentPolarChart() {
+        const ctx = document.getElementById('timeInvestmentPolarChart');
+        if (!ctx) return;
+        
+        if (this.timeInvestmentPolarChart) {
+            this.timeInvestmentPolarChart.destroy();
+        }
+        
+        const timeSlots = {
+            'Morning': 0,
+            'Afternoon': 0,
+            'Evening': 0,
+            'Night': 0
+        };
+        
+        Object.values(this.completions).forEach(day => {
+            Object.values(day).forEach(completion => {
+                if (completion.timestamp) {
+                    const hour = parseInt(moment(completion.timestamp).format('H'));
+                    if (hour >= 5 && hour < 12) timeSlots['Morning']++;
+                    else if (hour >= 12 && hour < 17) timeSlots['Afternoon']++;
+                    else if (hour >= 17 && hour < 22) timeSlots['Evening']++;
+                    else timeSlots['Night']++;
+                }
+            });
+        });
+        
+        this.timeInvestmentPolarChart = new Chart(ctx, {
+            type: 'polarArea',
+            data: {
+                labels: Object.keys(timeSlots),
+                datasets: [{
+                    data: Object.values(timeSlots),
+                    backgroundColor: [
+                        'rgba(251, 191, 36, 0.7)',
+                        'rgba(59, 130, 246, 0.7)',
+                        'rgba(168, 85, 247, 0.7)',
+                        'rgba(30, 41, 59, 0.7)'
+                    ],
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+    }
+
+    renderStreakQualityPolarChart() {
+        const ctx = document.getElementById('streakQualityPolarChart');
+        if (!ctx) return;
+        
+        if (this.streakQualityPolarChart) {
+            this.streakQualityPolarChart.destroy();
+        }
+        
+        const topHabits = [...this.habits]
+            .sort((a, b) => b.streak - a.streak)
+            .slice(0, 6);
+        
+        const labels = topHabits.map(h => h.name);
+        const streakQuality = topHabits.map(h => {
+            const currentStreak = h.streak;
+            const bestStreak = h.bestStreak;
+            return bestStreak > 0 ? (currentStreak / bestStreak) * 100 : 0;
+        });
+        
+        this.streakQualityPolarChart = new Chart(ctx, {
+            type: 'polarArea',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: streakQuality,
+                    backgroundColor: [
+                        'rgba(239, 68, 68, 0.7)',
+                        'rgba(249, 115, 22, 0.7)',
+                        'rgba(245, 158, 11, 0.7)',
+                        'rgba(132, 204, 22, 0.7)',
+                        'rgba(34, 197, 94, 0.7)',
+                        'rgba(16, 185, 129, 0.7)'
+                    ],
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.label + ': ' + context.parsed.r.toFixed(1) + '% of best';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        max: 100
+                    }
+                }
+            }
+        });
+    }
+
+    renderMomentumPolarChart() {
+        const ctx = document.getElementById('momentumPolarChart');
+        if (!ctx) return;
+        
+        if (this.momentumPolarChart) {
+            this.momentumPolarChart.destroy();
+        }
+        
+        const categories = _.groupBy(this.habits, 'category');
+        const labels = Object.keys(categories).map(cat => 
+            cat.charAt(0).toUpperCase() + cat.slice(1)
+        );
+        
+        const momentumData = Object.values(categories).map(habits => {
+            const avgMomentum = habits.reduce((sum, h) => {
+                const last7 = this.getLastNDaysCompletions(h.id, 7);
+                const prev7 = this.getLastNDaysCompletions(h.id, 14) - last7;
+                const momentum = prev7 > 0 ? ((last7 - prev7) / prev7) * 100 + 100 : last7 * 20;
+                return sum + momentum;
+            }, 0);
+            return Math.max(0, avgMomentum / habits.length);
+        });
+        
+        this.momentumPolarChart = new Chart(ctx, {
+            type: 'polarArea',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: momentumData,
+                    backgroundColor: [
+                        'rgba(236, 72, 153, 0.7)',
+                        'rgba(147, 51, 234, 0.7)',
+                        'rgba(99, 102, 241, 0.7)',
+                        'rgba(59, 130, 246, 0.7)',
+                        'rgba(14, 165, 233, 0.7)',
+                        'rgba(6, 182, 212, 0.7)',
+                        'rgba(20, 184, 166, 0.7)',
+                        'rgba(16, 185, 129, 0.7)'
+                    ],
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.label + ': ' + context.parsed.r.toFixed(1) + ' momentum';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // ===================================
+    // Bubble Charts
+    // ===================================
+    renderHabitBubbleChart() {
+        const ctx = document.getElementById('habitBubbleChart');
+        if (!ctx) return;
+        
+        if (this.habitBubbleChart) {
+            this.habitBubbleChart.destroy();
+        }
+        
+        const bubbleData = this.habits.map(habit => {
+            const completions = this.getLast30DaysCompletions(habit.id);
+            const possible = this.getLast30DaysPossible(habit);
+            const completionRate = possible > 0 ? (completions / possible) * 100 : 0;
+            
+            return {
+                x: habit.streak,
+                y: completionRate,
+                r: Math.sqrt(habit.totalCompletions) * 2,
+                label: habit.name,
+                color: habit.color
+            };
+        });
+        
+        this.habitBubbleChart = new Chart(ctx, {
+            type: 'bubble',
+            data: {
+                datasets: [{
+                    label: 'Habits Performance',
+                    data: bubbleData,
+                    backgroundColor: bubbleData.map(d => d.color + '80'),
+                    borderColor: bubbleData.map(d => d.color),
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const item = bubbleData[context.dataIndex];
+                                return [
+                                    item.label,
+                                    'Streak: ' + item.x + ' days',
+                                    'Completion Rate: ' + item.y.toFixed(1) + '%',
+                                    'Total Completions: ' + Math.round((item.r / 2) ** 2)
+                                ];
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Current Streak (days)'
+                        },
+                        beginAtZero: true
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Completion Rate (%)'
+                        },
+                        beginAtZero: true,
+                        max: 100
+                    }
+                }
+            }
+        });
+    }
+
+    renderCategoryBubbleChart() {
+        const ctx = document.getElementById('categoryBubbleChart');
+        if (!ctx) return;
+        
+        if (this.categoryBubbleChart) {
+            this.categoryBubbleChart.destroy();
+        }
+        
+        const categories = _.groupBy(this.habits, 'category');
+        const bubbleData = Object.keys(categories).map(category => {
+            const habits = categories[category];
+            const avgStreak = habits.reduce((sum, h) => sum + h.streak, 0) / habits.length;
+            const successRate = habits.reduce((sum, h) => {
+                const completions = this.getLast30DaysCompletions(h.id);
+                const possible = this.getLast30DaysPossible(h);
+                return sum + (possible > 0 ? (completions / possible) * 100 : 0);
+            }, 0) / habits.length;
+            
+            return {
+                x: avgStreak,
+                y: successRate,
+                r: habits.length * 10,
+                label: category.charAt(0).toUpperCase() + category.slice(1)
+            };
+        });
+        
+        const colors = [
+            '#667eea', '#f093fb', '#4facfe', '#43e97b',
+            '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'
+        ];
+        
+        this.categoryBubbleChart = new Chart(ctx, {
+            type: 'bubble',
+            data: {
+                datasets: [{
+                    label: 'Categories',
+                    data: bubbleData,
+                    backgroundColor: bubbleData.map((_, i) => colors[i] + '80'),
+                    borderColor: bubbleData.map((_, i) => colors[i]),
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const item = bubbleData[context.dataIndex];
+                                return [
+                                    item.label,
+                                    'Avg Streak: ' + item.x.toFixed(1) + ' days',
+                                    'Success Rate: ' + item.y.toFixed(1) + '%',
+                                    'Habit Count: ' + (item.r / 10)
+                                ];
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Average Streak (days)'
+                        },
+                        beginAtZero: true
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Success Rate (%)'
+                        },
+                        beginAtZero: true,
+                        max: 100
+                    }
+                }
+            }
+        });
+    }
+
+    renderMultiDimensionalBubble() {
+        const ctx = document.getElementById('multiDimensionalBubble');
+        if (!ctx) return;
+        
+        if (this.multiDimensionalBubble) {
+            this.multiDimensionalBubble.destroy();
+        }
+        
+        const bubbleData = this.habits.map(habit => {
+            const consistency = this.getLast30DaysCompletions(habit.id);
+            const momentum = this.getLastNDaysCompletions(habit.id, 7) * 4.3; // Extrapolate to 30 days
+            const size = habit.streak * 3;
+            
+            return {
+                x: consistency,
+                y: momentum,
+                r: size,
+                label: habit.name,
+                color: habit.color
+            };
+        });
+        
+        this.multiDimensionalBubble = new Chart(ctx, {
+            type: 'bubble',
+            data: {
+                datasets: [{
+                    label: 'Multi-Dimensional Analysis',
+                    data: bubbleData,
+                    backgroundColor: bubbleData.map(d => d.color + '60'),
+                    borderColor: bubbleData.map(d => d.color),
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const item = bubbleData[context.dataIndex];
+                                return [
+                                    item.label,
+                                    'Consistency: ' + item.x + ' completions',
+                                    'Momentum: ' + item.y.toFixed(1) + ' (projected)',
+                                    'Streak: ' + (item.r / 3).toFixed(0) + ' days'
+                                ];
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Consistency (30-day completions)'
+                        },
+                        beginAtZero: true
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Momentum (projected 30-day)'
+                        },
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
+
+    // ===================================
+    // Scatter Charts
+    // ===================================
+    renderStreakCompletionScatter() {
+        const ctx = document.getElementById('streakCompletionScatter');
+        if (!ctx) return;
+        
+        if (this.streakCompletionScatter) {
+            this.streakCompletionScatter.destroy();
+        }
+        
+        const scatterData = this.habits.map(habit => ({
+            x: habit.streak,
+            y: habit.totalCompletions,
+            label: habit.name
+        }));
+        
+        this.streakCompletionScatter = new Chart(ctx, {
+            type: 'scatter',
+            data: {
+                datasets: [{
+                    label: 'Habits',
+                    data: scatterData,
+                    backgroundColor: 'rgba(102, 126, 234, 0.6)',
+                    borderColor: 'rgb(102, 126, 234)',
+                    borderWidth: 2,
+                    pointRadius: 6,
+                    pointHoverRadius: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const item = scatterData[context.dataIndex];
+                                return [
+                                    item.label,
+                                    'Streak: ' + item.x + ' days',
+                                    'Total Completions: ' + item.y
+                                ];
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Current Streak'
+                        },
+                        beginAtZero: true
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Total Completions'
+                        },
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
+
+    renderTargetActualScatter() {
+        const ctx = document.getElementById('targetActualScatter');
+        if (!ctx) return;
+        
+        if (this.targetActualScatter) {
+            this.targetActualScatter.destroy();
+        }
+        
+        const scatterData = this.habits.map(habit => {
+            const possible = this.getLast30DaysPossible(habit);
+            const target = possible * habit.target;
+            const actual = this.getLast30DaysCompletions(habit.id);
+            
+            return {
+                x: target,
+                y: actual,
+                label: habit.name
+            };
+        });
+        
+        this.targetActualScatter = new Chart(ctx, {
+            type: 'scatter',
+            data: {
+                datasets: [
+                    {
+                        label: 'Habits',
+                        data: scatterData,
+                        backgroundColor: 'rgba(240, 147, 251, 0.6)',
+                        borderColor: 'rgb(240, 147, 251)',
+                        borderWidth: 2,
+                        pointRadius: 6,
+                        pointHoverRadius: 8
+                    },
+                    {
+                        label: 'Target Line',
+                        data: [{x: 0, y: 0}, {x: 100, y: 100}],
+                        type: 'line',
+                        borderColor: 'rgba(34, 197, 94, 0.5)',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        pointRadius: 0,
+                        fill: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                if (context.datasetIndex === 0) {
+                                    const item = scatterData[context.dataIndex];
+                                    return [
+                                        item.label,
+                                        'Target: ' + item.x,
+                                        'Actual: ' + item.y,
+                                        'Achievement: ' + (item.x > 0 ? ((item.y / item.x) * 100).toFixed(1) : 0) + '%'
+                                    ];
+                                }
+                                return '';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Target (30 days)'
+                        },
+                        beginAtZero: true
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Actual Completions'
+                        },
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
+
+    renderConsistencyFrequencyScatter() {
+        const ctx = document.getElementById('consistencyFrequencyScatter');
+        if (!ctx) return;
+        
+        if (this.consistencyFrequencyScatter) {
+            this.consistencyFrequencyScatter.destroy();
+        }
+        
+        const scatterData = this.habits.map(habit => {
+            const completions = this.getLast30DaysCompletions(habit.id);
+            const possible = this.getLast30DaysPossible(habit);
+            const consistency = possible > 0 ? (completions / possible) * 100 : 0;
+            
+            return {
+                x: possible,
+                y: consistency,
+                label: habit.name
+            };
+        });
+        
+        this.consistencyFrequencyScatter = new Chart(ctx, {
+            type: 'scatter',
+            data: {
+                datasets: [{
+                    label: 'Habits',
+                    data: scatterData,
+                    backgroundColor: 'rgba(67, 233, 123, 0.6)',
+                    borderColor: 'rgb(67, 233, 123)',
+                    borderWidth: 2,
+                    pointRadius: 6,
+                    pointHoverRadius: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const item = scatterData[context.dataIndex];
+                                return [
+                                    item.label,
+                                    'Frequency: ' + item.x + ' times/30d',
+                                    'Consistency: ' + item.y.toFixed(1) + '%'
+                                ];
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Expected Frequency (30 days)'
+                        },
+                        beginAtZero: true
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Consistency (%)'
+                        },
+                        beginAtZero: true,
+                        max: 100
+                    }
+                }
+            }
+        });
+    }
+
+    // ===================================
+    // Correlation Heatmap
+    // ===================================
+    renderCorrelationHeatmap() {
+        const container = document.getElementById('correlationHeatmap');
+        if (!container) return;
+        
+        if (this.habits.length < 2) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-chart-line"></i>
+                    <h3>Not enough data</h3>
+                    <p>Add more habits to see correlation analysis</p>
+                </div>
+            `;
+            return;
+        }
+        
+        // Calculate correlation matrix
+        const topHabits = [...this.habits]
+            .sort((a, b) => b.totalCompletions - a.totalCompletions)
+            .slice(0, 6);
+        
+        const correlationMatrix = [];
+        
+        topHabits.forEach(habit1 => {
+            const row = [];
+            topHabits.forEach(habit2 => {
+                if (habit1.id === habit2.id) {
+                    row.push(1);
+                } else {
+                    row.push(this.calculateCorrelation(habit1.id, habit2.id));
+                }
+            });
+            correlationMatrix.push(row);
+        });
+        
+        // Generate heatmap HTML
+        let html = '<div class="correlation-header">';
+        topHabits.forEach(habit => {
+            html += `<div class="correlation-header-label">${habit.name}</div>`;
+        });
+        html += '</div>';
+        
+        topHabits.forEach((habit, i) => {
+            html += '<div class="correlation-row">';
+            html += `<div class="correlation-label">${habit.name}</div>`;
+            html += '<div class="correlation-cells">';
+            
+            correlationMatrix[i].forEach((value, j) => {
+                const intensity = Math.abs(value);
+                const hue = value >= 0 ? 120 : 0; // Green for positive, red for negative
+                const color = `hsla(${hue}, 70%, ${50 + intensity * 20}%, 0.8)`;
+                
+                html += `<div class="correlation-cell" 
+                              style="background: ${color};" 
+                              data-value="${value.toFixed(2)}"
+                              title="${topHabits[i].name} ↔ ${topHabits[j].name}: ${(value * 100).toFixed(0)}%">
+                         </div>`;
+            });
+            
+            html += '</div></div>';
+        });
+        
+        html += `
+            <div class="correlation-legend">
+                <div class="correlation-legend-item">
+                    <div class="correlation-legend-color" style="background: linear-gradient(to right, hsla(0, 70%, 50%, 0.8), hsla(120, 70%, 50%, 0.8));"></div>
+                    <span>Negative ← → Positive Correlation</span>
+                </div>
+            </div>
+        `;
+        
+        container.innerHTML = html;
+    }
+
+    calculateCorrelation(habitId1, habitId2) {
+        const dateRange = this.getDateRangeData();
+        const completions1 = [];
+        const completions2 = [];
+        
+        dateRange.forEach(date => {
+            const dateStr = date.format('YYYY-MM-DD');
+            const comp1 = this.completions[dateStr] && this.completions[dateStr][habitId1] ? 1 : 0;
+            const comp2 = this.completions[dateStr] && this.completions[dateStr][habitId2] ? 1 : 0;
+            completions1.push(comp1);
+            completions2.push(comp2);
+        });
+        
+        // Calculate Pearson correlation coefficient
+        const n = completions1.length;
+        if (n === 0) return 0;
+        
+        const sum1 = completions1.reduce((a, b) => a + b, 0);
+        const sum2 = completions2.reduce((a, b) => a + b, 0);
+        const sum1Sq = completions1.reduce((a, b) => a + b * b, 0);
+        const sum2Sq = completions2.reduce((a, b) => a + b * b, 0);
+        const pSum = completions1.reduce((a, b, i) => a + b * completions2[i], 0);
+        
+        const num = pSum - (sum1 * sum2 / n);
+        const den = Math.sqrt((sum1Sq - sum1 * sum1 / n) * (sum2Sq - sum2 * sum2 / n));
+        
+        return den === 0 ? 0 : num / den;
+    }
+
+    getLastNDaysCompletions(habitId, days) {
+        let count = 0;
+        for (let i = 0; i < days; i++) {
+            const date = moment().subtract(i, 'days').format('YYYY-MM-DD');
+            if (this.completions[date] && this.completions[date][habitId]) {
                 count++;
             }
         }
