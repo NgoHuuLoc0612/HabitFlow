@@ -652,6 +652,12 @@ class HabitTrackerApp {
         this.renderHabitDistributionChart();
         this.renderBestHabits();
         this.renderStreakHistoryChart();
+        this.renderCategoryRadarChart();
+        this.renderFrequencyRadarChart();
+        this.renderTimeOfDayRadarChart();
+        this.renderWeeklyRadarChart();
+        this.renderConsistencyRadarChart();
+        this.renderTargetRadarChart();
     }
 
     renderWeeklyChart() {
@@ -909,6 +915,548 @@ class HabitTrackerApp {
                 this.renderWeeklyChart();
             }
         }, 100);
+    }
+
+    // ===================================
+    // Advanced Radar Charts
+    // ===================================
+    renderCategoryRadarChart() {
+        const ctx = document.getElementById('categoryRadarChart');
+        if (!ctx) return;
+        
+        if (this.categoryRadarChart) {
+            this.categoryRadarChart.destroy();
+        }
+        
+        // Group habits by category and calculate performance metrics
+        const categories = _.groupBy(this.habits, 'category');
+        const categoryData = {};
+        
+        Object.keys(categories).forEach(category => {
+            const habits = categories[category];
+            const totalCompletions = habits.reduce((sum, h) => sum + h.totalCompletions, 0);
+            const avgStreak = habits.reduce((sum, h) => sum + h.streak, 0) / habits.length;
+            const avgCompletion = habits.reduce((sum, h) => {
+                const last30 = this.getLast30DaysCompletions(h.id);
+                return sum + last30;
+            }, 0) / habits.length;
+            
+            categoryData[category] = {
+                completions: totalCompletions,
+                avgStreak: avgStreak,
+                avgCompletion: avgCompletion,
+                count: habits.length
+            };
+        });
+        
+        const labels = Object.keys(categoryData).map(cat => 
+            cat.charAt(0).toUpperCase() + cat.slice(1)
+        );
+        
+        const completionData = Object.values(categoryData).map(d => d.avgCompletion);
+        const streakData = Object.values(categoryData).map(d => d.avgStreak);
+        const countData = Object.values(categoryData).map(d => d.count * 5); // Scale for visibility
+        
+        this.categoryRadarChart = new Chart(ctx, {
+            type: 'radar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Avg Completions (30d)',
+                        data: completionData,
+                        backgroundColor: 'rgba(102, 126, 234, 0.2)',
+                        borderColor: 'rgb(102, 126, 234)',
+                        borderWidth: 2,
+                        pointBackgroundColor: 'rgb(102, 126, 234)',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: 'rgb(102, 126, 234)'
+                    },
+                    {
+                        label: 'Avg Streak',
+                        data: streakData,
+                        backgroundColor: 'rgba(240, 147, 251, 0.2)',
+                        borderColor: 'rgb(240, 147, 251)',
+                        borderWidth: 2,
+                        pointBackgroundColor: 'rgb(240, 147, 251)',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: 'rgb(240, 147, 251)'
+                    },
+                    {
+                        label: 'Habit Count (×5)',
+                        data: countData,
+                        backgroundColor: 'rgba(67, 233, 123, 0.2)',
+                        borderColor: 'rgb(67, 233, 123)',
+                        borderWidth: 2,
+                        pointBackgroundColor: 'rgb(67, 233, 123)',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: 'rgb(67, 233, 123)'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        ticks: {
+                            backdropColor: 'transparent'
+                        },
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        },
+                        angleLines: {
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+    }
+
+    renderFrequencyRadarChart() {
+        const ctx = document.getElementById('frequencyRadarChart');
+        if (!ctx) return;
+        
+        if (this.frequencyRadarChart) {
+            this.frequencyRadarChart.destroy();
+        }
+        
+        // Analyze habits by frequency type
+        const frequencies = {
+            'Daily': this.habits.filter(h => h.frequency === 'daily'),
+            'Weekly': this.habits.filter(h => h.frequency === 'weekly'),
+            'Custom': this.habits.filter(h => h.frequency === 'custom')
+        };
+        
+        const labels = Object.keys(frequencies);
+        const countData = Object.values(frequencies).map(habits => habits.length);
+        const completionData = Object.values(frequencies).map(habits => {
+            if (habits.length === 0) return 0;
+            return habits.reduce((sum, h) => sum + h.totalCompletions, 0) / habits.length;
+        });
+        const streakData = Object.values(frequencies).map(habits => {
+            if (habits.length === 0) return 0;
+            return habits.reduce((sum, h) => sum + h.streak, 0) / habits.length;
+        });
+        
+        this.frequencyRadarChart = new Chart(ctx, {
+            type: 'radar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Habit Count',
+                        data: countData,
+                        backgroundColor: 'rgba(79, 172, 254, 0.2)',
+                        borderColor: 'rgb(79, 172, 254)',
+                        borderWidth: 2,
+                        pointBackgroundColor: 'rgb(79, 172, 254)',
+                        pointBorderColor: '#fff'
+                    },
+                    {
+                        label: 'Avg Completions',
+                        data: completionData,
+                        backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                        borderColor: 'rgb(245, 158, 11)',
+                        borderWidth: 2,
+                        pointBackgroundColor: 'rgb(245, 158, 11)',
+                        pointBorderColor: '#fff'
+                    },
+                    {
+                        label: 'Avg Streak',
+                        data: streakData,
+                        backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                        borderColor: 'rgb(239, 68, 68)',
+                        borderWidth: 2,
+                        pointBackgroundColor: 'rgb(239, 68, 68)',
+                        pointBorderColor: '#fff'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        ticks: {
+                            backdropColor: 'transparent'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+    }
+
+    renderTimeOfDayRadarChart() {
+        const ctx = document.getElementById('timeOfDayRadarChart');
+        if (!ctx) return;
+        
+        if (this.timeOfDayRadarChart) {
+            this.timeOfDayRadarChart.destroy();
+        }
+        
+        // Analyze completion times (if reminder times are set)
+        const timeSlots = {
+            'Early Morning (5-8)': 0,
+            'Morning (8-12)': 0,
+            'Afternoon (12-17)': 0,
+            'Evening (17-21)': 0,
+            'Night (21-24)': 0,
+            'Late Night (0-5)': 0
+        };
+        
+        // Count completions by time based on completion timestamps
+        Object.values(this.completions).forEach(day => {
+            Object.values(day).forEach(completion => {
+                if (completion.timestamp) {
+                    const hour = parseInt(moment(completion.timestamp).format('H'));
+                    if (hour >= 5 && hour < 8) timeSlots['Early Morning (5-8)']++;
+                    else if (hour >= 8 && hour < 12) timeSlots['Morning (8-12)']++;
+                    else if (hour >= 12 && hour < 17) timeSlots['Afternoon (12-17)']++;
+                    else if (hour >= 17 && hour < 21) timeSlots['Evening (17-21)']++;
+                    else if (hour >= 21 && hour < 24) timeSlots['Night (21-24)']++;
+                    else timeSlots['Late Night (0-5)']++;
+                }
+            });
+        });
+        
+        const labels = Object.keys(timeSlots);
+        const data = Object.values(timeSlots);
+        
+        this.timeOfDayRadarChart = new Chart(ctx, {
+            type: 'radar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Completions by Time',
+                    data: data,
+                    backgroundColor: 'rgba(139, 92, 246, 0.2)',
+                    borderColor: 'rgb(139, 92, 246)',
+                    borderWidth: 2,
+                    pointBackgroundColor: 'rgb(139, 92, 246)',
+                    pointBorderColor: '#fff',
+                    pointHoverBackgroundColor: '#fff',
+                    pointHoverBorderColor: 'rgb(139, 92, 246)'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        ticks: {
+                            backdropColor: 'transparent'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+    }
+
+    renderWeeklyRadarChart() {
+        const ctx = document.getElementById('weeklyRadarChart');
+        if (!ctx) return;
+        
+        if (this.weeklyRadarChart) {
+            this.weeklyRadarChart.destroy();
+        }
+        
+        // Calculate completions by day of week
+        const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const completionsByDay = [0, 0, 0, 0, 0, 0, 0];
+        const habitsByDay = [0, 0, 0, 0, 0, 0, 0];
+        
+        Object.keys(this.completions).forEach(dateStr => {
+            const dayIndex = moment(dateStr).day();
+            completionsByDay[dayIndex] += Object.keys(this.completions[dateStr]).length;
+        });
+        
+        // Count expected habits by day
+        this.habits.forEach(habit => {
+            if (habit.frequency === 'daily') {
+                for (let i = 0; i < 7; i++) {
+                    habitsByDay[i]++;
+                }
+            } else if (habit.selectedDays) {
+                habit.selectedDays.forEach(day => {
+                    habitsByDay[day]++;
+                });
+            }
+        });
+        
+        // Calculate completion rates
+        const completionRates = completionsByDay.map((count, i) => {
+            return habitsByDay[i] > 0 ? (count / habitsByDay[i]) * 100 : 0;
+        });
+        
+        this.weeklyRadarChart = new Chart(ctx, {
+            type: 'radar',
+            data: {
+                labels: daysOfWeek,
+                datasets: [
+                    {
+                        label: 'Completion Rate (%)',
+                        data: completionRates,
+                        backgroundColor: 'rgba(6, 182, 212, 0.2)',
+                        borderColor: 'rgb(6, 182, 212)',
+                        borderWidth: 2,
+                        pointBackgroundColor: 'rgb(6, 182, 212)',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: 'rgb(6, 182, 212)'
+                    },
+                    {
+                        label: 'Total Completions',
+                        data: completionsByDay,
+                        backgroundColor: 'rgba(236, 72, 153, 0.2)',
+                        borderColor: 'rgb(236, 72, 153)',
+                        borderWidth: 2,
+                        pointBackgroundColor: 'rgb(236, 72, 153)',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: 'rgb(236, 72, 153)'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        ticks: {
+                            backdropColor: 'transparent'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+    }
+
+    renderConsistencyRadarChart() {
+        const ctx = document.getElementById('consistencyRadarChart');
+        if (!ctx) return;
+        
+        if (this.consistencyRadarChart) {
+            this.consistencyRadarChart.destroy();
+        }
+        
+        // Get top 6 habits by completion
+        const topHabits = [...this.habits]
+            .sort((a, b) => b.totalCompletions - a.totalCompletions)
+            .slice(0, 6);
+        
+        if (topHabits.length === 0) {
+            return;
+        }
+        
+        const labels = topHabits.map(h => h.name);
+        const streakData = topHabits.map(h => h.streak);
+        const completionData = topHabits.map(h => {
+            const last30 = this.getLast30DaysCompletions(h.id);
+            return last30;
+        });
+        const consistencyScore = topHabits.map(h => {
+            const last30 = this.getLast30DaysCompletions(h.id);
+            const possible = this.getLast30DaysPossible(h);
+            return possible > 0 ? (last30 / possible) * 100 : 0;
+        });
+        
+        this.consistencyRadarChart = new Chart(ctx, {
+            type: 'radar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Current Streak',
+                        data: streakData,
+                        backgroundColor: 'rgba(251, 146, 60, 0.2)',
+                        borderColor: 'rgb(251, 146, 60)',
+                        borderWidth: 2,
+                        pointBackgroundColor: 'rgb(251, 146, 60)',
+                        pointBorderColor: '#fff'
+                    },
+                    {
+                        label: 'Completions (30d)',
+                        data: completionData,
+                        backgroundColor: 'rgba(34, 197, 94, 0.2)',
+                        borderColor: 'rgb(34, 197, 94)',
+                        borderWidth: 2,
+                        pointBackgroundColor: 'rgb(34, 197, 94)',
+                        pointBorderColor: '#fff'
+                    },
+                    {
+                        label: 'Consistency Score',
+                        data: consistencyScore,
+                        backgroundColor: 'rgba(168, 85, 247, 0.2)',
+                        borderColor: 'rgb(168, 85, 247)',
+                        borderWidth: 2,
+                        pointBackgroundColor: 'rgb(168, 85, 247)',
+                        pointBorderColor: '#fff'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        ticks: {
+                            backdropColor: 'transparent'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+    }
+
+    renderTargetRadarChart() {
+        const ctx = document.getElementById('targetRadarChart');
+        if (!ctx) return;
+        
+        if (this.targetRadarChart) {
+            this.targetRadarChart.destroy();
+        }
+        
+        // Analyze target achievement by category
+        const categories = _.groupBy(this.habits, 'category');
+        const categoryMetrics = {};
+        
+        Object.keys(categories).forEach(category => {
+            const habits = categories[category];
+            let totalAchievement = 0;
+            let targetCompletions = 0;
+            let actualCompletions = 0;
+            
+            habits.forEach(habit => {
+                const last30 = this.getLast30DaysCompletions(habit.id);
+                const possible = this.getLast30DaysPossible(habit);
+                actualCompletions += last30;
+                targetCompletions += possible * habit.target;
+            });
+            
+            totalAchievement = targetCompletions > 0 ? 
+                (actualCompletions / targetCompletions) * 100 : 0;
+            
+            categoryMetrics[category] = {
+                achievement: Math.min(totalAchievement, 100),
+                actual: actualCompletions,
+                target: targetCompletions
+            };
+        });
+        
+        const labels = Object.keys(categoryMetrics).map(cat => 
+            cat.charAt(0).toUpperCase() + cat.slice(1)
+        );
+        const achievementData = Object.values(categoryMetrics).map(m => m.achievement);
+        
+        this.targetRadarChart = new Chart(ctx, {
+            type: 'radar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Target Achievement (%)',
+                    data: achievementData,
+                    backgroundColor: 'rgba(20, 184, 166, 0.2)',
+                    borderColor: 'rgb(20, 184, 166)',
+                    borderWidth: 3,
+                    pointBackgroundColor: 'rgb(20, 184, 166)',
+                    pointBorderColor: '#fff',
+                    pointHoverBackgroundColor: '#fff',
+                    pointHoverBorderColor: 'rgb(20, 184, 166)',
+                    pointRadius: 5,
+                    pointHoverRadius: 7
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {
+                            backdropColor: 'transparent',
+                            callback: function(value) {
+                                return value + '%';
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.parsed.r.toFixed(1) + '%';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Helper methods for radar charts
+    getLast30DaysCompletions(habitId) {
+        let count = 0;
+        for (let i = 0; i < 30; i++) {
+            const date = moment().subtract(i, 'days').format('YYYY-MM-DD');
+            if (this.completions[date] && this.completions[date][habitId]) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    getLast30DaysPossible(habit) {
+        let count = 0;
+        for (let i = 0; i < 30; i++) {
+            const date = moment().subtract(i, 'days');
+            const dayOfWeek = date.day();
+            
+            if (habit.frequency === 'daily') {
+                count++;
+            } else if (habit.selectedDays && habit.selectedDays.includes(dayOfWeek)) {
+                count++;
+            }
+        }
+        return count;
     }
 
     // ===================================
