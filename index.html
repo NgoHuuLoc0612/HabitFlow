@@ -197,6 +197,17 @@
                 <div class="view-header">
                     <h2>Analytics & Insights</h2>
                     <p>Track your progress and patterns</p>
+                    <div class="date-range-selector">
+                        <label>Date Range:</label>
+                        <select id="dateRangeSelect" class="date-range-select">
+                            <option value="7">Last 7 Days</option>
+                            <option value="30" selected>Last 30 Days</option>
+                            <option value="60">Last 60 Days</option>
+                            <option value="90">Last 90 Days</option>
+                            <option value="custom">Custom Range</option>
+                        </select>
+                        <input type="text" id="customDateRange" class="form-input" style="display: none;" placeholder="Select date range">
+                    </div>
                 </div>
 
                 <div class="analytics-grid">
@@ -239,6 +250,63 @@
                     <div class="analytics-card">
                         <h3>Target Achievement</h3>
                         <canvas id="targetRadarChart"></canvas>
+                    </div>
+                    
+                    <!-- Polar Area Charts -->
+                    <div class="analytics-card">
+                        <h3>Category Engagement Polar</h3>
+                        <canvas id="categoryPolarChart"></canvas>
+                    </div>
+                    <div class="analytics-card">
+                        <h3>Time Investment Polar</h3>
+                        <canvas id="timeInvestmentPolarChart"></canvas>
+                    </div>
+                    <div class="analytics-card">
+                        <h3>Streak Quality Polar</h3>
+                        <canvas id="streakQualityPolarChart"></canvas>
+                    </div>
+                    
+                    <!-- Bubble Charts -->
+                    <div class="analytics-card large-card">
+                        <h3>Habit Performance Bubble Analysis</h3>
+                        <p class="chart-description">Size = Total Completions | X = Streak | Y = Completion Rate</p>
+                        <canvas id="habitBubbleChart"></canvas>
+                    </div>
+                    <div class="analytics-card large-card">
+                        <h3>Category Efficiency Bubble</h3>
+                        <p class="chart-description">Size = Habit Count | X = Avg Streak | Y = Success Rate</p>
+                        <canvas id="categoryBubbleChart"></canvas>
+                    </div>
+                    
+                    <!-- Scatter Charts -->
+                    <div class="analytics-card">
+                        <h3>Streak vs Completion Scatter</h3>
+                        <canvas id="streakCompletionScatter"></canvas>
+                    </div>
+                    <div class="analytics-card">
+                        <h3>Target vs Actual Scatter</h3>
+                        <canvas id="targetActualScatter"></canvas>
+                    </div>
+                    <div class="analytics-card">
+                        <h3>Consistency vs Frequency Scatter</h3>
+                        <canvas id="consistencyFrequencyScatter"></canvas>
+                    </div>
+                    
+                    <!-- Correlation Analysis -->
+                    <div class="analytics-card large-card">
+                        <h3>Habit Correlation Heatmap</h3>
+                        <p class="chart-description">Shows which habits tend to be completed together</p>
+                        <div id="correlationHeatmap" class="correlation-heatmap"></div>
+                    </div>
+                    
+                    <div class="analytics-card">
+                        <h3>Multi-Dimensional Performance</h3>
+                        <canvas id="multiDimensionalBubble"></canvas>
+                    </div>
+                    
+                    <div class="analytics-card">
+                        <h3>Habit Momentum Polar</h3>
+                        <canvas id="momentumPolarChart"></canvas>
                     </div>
                 </div>
             </section>
