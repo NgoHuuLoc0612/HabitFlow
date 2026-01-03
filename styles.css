@@ -614,6 +614,10 @@ body {
     box-shadow: var(--shadow-md);
 }
 
+.analytics-card.large-card {
+    grid-column: span 2;
+}
+
 .analytics-card h3 {
     font-size: 1.1rem;
     font-weight: 600;
@@ -1136,6 +1140,10 @@ input:checked + .toggle-slider:before {
 @media (max-width: 1024px) {
     .analytics-grid {
         grid-template-columns: 1fr;
+    }
+    
+    .analytics-card.large-card {
+        grid-column: span 1;
     }
 }
 
